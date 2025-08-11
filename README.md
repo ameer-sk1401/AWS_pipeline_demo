@@ -62,7 +62,7 @@ Why? CodeDeploy needs this agent to receive and run your deployment instructions
 
 Your repo should look like this:
 
-.
+		.
 ├── src/
 │   ├── app.py                 # Flask app
 │   └── requirements.txt       # Flask + Gunicorn
