@@ -6,7 +6,7 @@ app = Flask(__name__)
 # Define a route for the home page
 @app.route('/')
 def home():
-    return 'Hello, World!'
+    return 'Hello, World! and the cicd handson was successful!'
 
 # Define a route for a different page
 @app.route('/about')
