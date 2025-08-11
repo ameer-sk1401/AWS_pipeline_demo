@@ -1,9 +1,3 @@
-Perfect—here’s an updated README.md you can paste into your repo.
-It includes a clean Mermaid workflow diagram (GitHub renders it automatically) and quick steps to export it as a PNG if you prefer an image file.
-
-⸻
-
-
 # Flask App CI/CD on AWS (CodePipeline + CodeBuild + CodeDeploy)
 
 A beginner‑friendly, production‑ready CI/CD pipeline for a simple **Flask Hello World** app deployed to **Amazon EC2** using **AWS CodePipeline**, **CodeBuild**, and **CodeDeploy** with **GitHub** as the source.
@@ -179,7 +173,4 @@ What to Learn Next
 	•	Replace manual EC2 agent install with Launch Template user‑data or a baked AMI
 	•	Use OIDC for GitHub Actions → (Hybrid CI in Actions, CD in CodeDeploy)
 
-⸻
 
-
-Want me to also add a **docs/** folder with a pre‑rendered PNG (I can give you the exact SVG/PNG content or a quick command to export from Mermaid CLI)?
