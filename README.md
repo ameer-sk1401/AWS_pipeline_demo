@@ -1,124 +1,88 @@
-# Flask App CI/CD on AWS (CodePipeline + CodeBuild + CodeDeploy)
+# 🚀 CI/CD for Flask App on AWS (GitHub → CodePipeline → CodeBuild → CodeDeploy → EC2)
 
-A beginner‑friendly, production‑ready CI/CD pipeline for a simple **Flask Hello World** app deployed to **Amazon EC2** using **AWS CodePipeline**, **CodeBuild**, and **CodeDeploy** with **GitHub** as the source.
+This guide will teach you from **scratch** how to:
 
-> **Note (2025 console):** Create your GitHub connection at  
-> **AWS Console → Developer Tools → Settings → Connections → Create connection (GitHub OAuth)**.  
-> Select this connection in the **CodePipeline Source** stage.
+1. Connect **GitHub** to AWS using **OAuth**
+2. Build a CI/CD pipeline with **AWS CodePipeline**, **CodeBuild**, and **CodeDeploy**
+3. Deploy a Flask app to **EC2** automatically on every GitHub push.
+
+> **Good for beginners (2025 edition)** — updated for the **latest AWS Console changes**.
 
 ---
 
-## Architecture (Diagram)
+## 📌 Prerequisites
 
-	```mermaid
-flowchart LR
-  A[Developer\nPush to GitHub] --> B[CodePipeline\nSource: GitHub Connection]
-  B --> C[CodeBuild\nbuildspec.yml\n - install deps\n - package bundle]
-  C -- Artifact (S3 via CodePipeline) --> D[CodeDeploy\nApplication + Deployment Group]
-  D --> E[EC2 Instance\ncodedeploy-agent]
-  E --> F[Flask app via Gunicorn :8000]
+Before you start, make sure you have:
 
-Want a PNG instead of Mermaid?
-	•	Open https://mermaid.live, paste the diagram, Export → PNG,
-	•	Save to docs/cicd-workflow.png, and reference it in the README:
-![CI/CD Workflow](docs/cicd-workflow.png)
+- An **AWS account**
+- A **GitHub account**
+- Basic familiarity with:
+  - Linux commands
+  - Python / Flask
+
+---
+
+## 🏗 Step 1 — EC2 Instance Setup
+
+1. **Launch EC2 instance**
+   - AMI: **Amazon Linux 2**
+   - Instance type: `t2.micro` (free tier eligible)
+   - Security group: allow **SSH (22)**, **HTTP (80)**, and your app port (e.g., **8000**)
+   - Attach **IAM Role** with policy:  
+     - `AmazonEC2RoleforAWSCodeDeploy` (or custom: CodeDeploy + S3 read access)
+
+2. **Install CodeDeploy agent**
+   ```bash
+   sudo yum update -y
+   sudo yum install -y ruby wget
+   cd /home/ec2-user
+   wget https://aws-codedeploy-<region>.s3.<region>.amazonaws.com/latest/install
+   chmod +x ./install
+   sudo ./install auto
+   sudo service codedeploy-agent start
+   sudo systemctl enable codedeploy-agent
+
+Why? CodeDeploy needs this agent to receive and run your deployment instructions.
 
 ⸻
 
-Repository Structure
+🔑 Step 2 — GitHub Connection (2025 Console)
+	1.	Go to: AWS Console → Developer Tools → Settings → Connections
+	2.	Click Create connection
+	3.	Select GitHub as provider
+	4.	Choose GitHub OAuth
+	•	Click Connect to GitHub
+	•	Authorize AWS to access your repos
+	5.	Give your connection a name (e.g., github-flask-connection)
+	6.	Save — you will use this in CodePipeline Source stage.
+
+⸻
+
+🗂 Step 3 — Project Structure
+
+Your repo should look like this:
 
 .
 ├── src/
-│   ├── app.py                 # Flask app (exposes / and /health)
-│   └── requirements.txt       # App-specific deps (Flask, Gunicorn)
+│   ├── app.py                 # Flask app
+│   └── requirements.txt       # Flask + Gunicorn
 │
-├── scripts/                   # CodeDeploy lifecycle hooks (EC2)
-│   ├── before_install.sh      # stop old app, prep dirs
-│   ├── after_install.sh       # venv + pip install + systemd unit
-│   ├── start.sh               # enable+restart service
-│   └── health_check.sh        # curl http://localhost:8000/health
+├── scripts/
+│   ├── before_install.sh      # stop old app
+│   ├── after_install.sh       # install deps, venv
+│   ├── start.sh               # start app via systemd
+│   └── health_check.sh        # curl /health
 │
-├── appspec.yml                # CodeDeploy (EC2) mapping + hooks
-├── buildspec.yml              # CodeBuild packaging instructions
-├── README.md
-└── (optional) docs/cicd-workflow.png
+├── appspec.yml                # CodeDeploy config
+├── buildspec.yml              # CodeBuild config
+└── README.md
 
 
 ⸻
 
-How the Pipeline Works
-	1.	Push to GitHub (tracked branch, e.g., main).
-	2.	CodePipeline (Source stage) uses your GitHub OAuth connection to fetch the commit.
-	3.	CodeBuild runs buildspec.yml:
-	•	installs deps (for tests/packaging),
-	•	copies src/, scripts/, and appspec.yml into a bundle,
-	•	publishes a single artifact to the CodePipeline S3 artifact store.
-	4.	CodeDeploy (Deploy stage) downloads the artifact to the EC2 instance and runs hooks:
-	•	BeforeInstall → scripts/before_install.sh
-	•	AfterInstall → scripts/after_install.sh
-	•	ApplicationStart → scripts/start.sh
-	•	ValidateService → scripts/health_check.sh
-	5.	The app runs behind systemd at :8000 (gunicorn app:app).
+📜 Step 4 — appspec.yml
 
-⸻
-
-One‑Time AWS Setup
-
-1) EC2 instance (Amazon Linux 2) + CodeDeploy agent
-
-sudo yum update -y
-sudo yum install -y ruby wget
-cd /home/ec2-user
-wget https://aws-codedeploy-<region>.s3.<region>.amazonaws.com/latest/install
-chmod +x ./install
-sudo ./install auto
-sudo service codedeploy-agent start
-sudo systemctl enable codedeploy-agent
-
-2) IAM roles (minimal to get started)
-	•	EC2 instance profile: permissions to talk to CodeDeploy and read artifacts from S3.
-(Managed policy often named AWSCodeDeployRoleForEC2 or add equivalent inline permissions + S3 read; add KMS decrypt if your artifact bucket uses a CMK.)
-	•	CodePipeline service role: can start CodeBuild/CodeDeploy and pass artifacts.
-	•	CodeBuild service role: can read source (provided by pipeline), write artifacts to the pipeline store, and write CloudWatch logs.
-
-3) Developer Tools → Connections (GitHub OAuth)
-	•	Create connection → Provider GitHub → authorize via OAuth → grant access to your repo.
-	•	Use this connection in CodePipeline Source.
-
-4) CodePipeline (console wizard)
-	•	Source: GitHub (select your OAuth connection, repo, branch)
-	•	Build: AWS CodeBuild → project uses buildspec.yml
-	•	In the CodeBuild project: set Artifacts = CodePipeline
-	•	Deploy: AWS CodeDeploy → Application + Deployment Group (targets your EC2)
-	•	Deployment config: start with AllAtOnce for single instance.
-
-⸻
-
-Key Config Files (already in this repo)
-
-buildspec.yml
-
-Packages the app so appspec.yml sits at the root of the artifact (required by CodeDeploy):
-
-version: 0.2
-phases:
-  install:
-    commands:
-      - pip install -r src/requirements.txt
-  build:
-    commands:
-      - rm -rf bundle
-      - mkdir -p bundle
-      - cp -r src bundle/src
-      - cp appspec.yml bundle/
-      - cp -r scripts bundle/scripts
-artifacts:
-  base-directory: bundle
-  files:
-    - '**/*'
-  discard-paths: no
-
-appspec.yml (EC2)
+CodeDeploy uses appspec.yml to know where to copy files and what scripts to run.
 
 version: 0.0
 os: linux
@@ -144,33 +108,110 @@ hooks:
     - location: scripts/health_check.sh
       runas: root
 
-Why this matters: CodeDeploy only looks for appspec.yml at the root of the unzipped artifact.
-The buildspec.yml above guarantees that.
 
 ⸻
 
-Local Run (optional)
+📜 Step 5 — buildspec.yml
 
-cd src
-pip install -r requirements.txt
-python app.py
-# open http://localhost:8000 (or 5000 if using Flask dev server)
+CodeBuild runs this to package your artifact.
+
+version: 0.2
+phases:
+  install:
+    commands:
+      - pip install -r src/requirements.txt
+  build:
+    commands:
+      - mkdir -p bundle
+      - cp -r src bundle/src
+      - cp appspec.yml bundle/
+      - cp -r scripts bundle/scripts
+artifacts:
+  base-directory: bundle
+  files:
+    - '**/*'
+  discard-paths: no
+
+Tip: This ensures appspec.yml is at the root of the ZIP — required by CodeDeploy.
+
+⸻
+
+⚙ Step 6 — CodeDeploy Application + Deployment Group
+	1.	Go to AWS Console → CodeDeploy → Applications → Create application
+	•	Compute platform: EC2/On-Premises
+	2.	Create Deployment Group
+	•	Select your EC2 instance via tag
+	•	Choose deployment settings: AllAtOnce (for single instance)
+	•	Use the IAM Role you attached to EC2 earlier
+
+⸻
+
+🔄 Step 7 — CodePipeline Setup
+	1.	Go to CodePipeline → Create pipeline
+	2.	Source stage
+	•	Provider: GitHub
+	•	Connection: select the one you created in Step 2
+	•	Repo: choose your Flask repo
+	•	Branch: main
+	3.	Build stage
+	•	Provider: AWS CodeBuild
+	•	Create new build project:
+	•	Environment: Managed image → Ubuntu
+	•	Runtime: Standard
+	•	Artifacts: CodePipeline
+	•	Buildspec: buildspec.yml in repo
+	4.	Deploy stage
+	•	Provider: AWS CodeDeploy
+	•	Application: select from Step 6
+	•	Deployment Group: select from Step 6
+
+⸻
+
+📈 Step 8 — Workflow Diagram
+
+flowchart LR
+  A[Push code to GitHub] --> B[CodePipeline: Source]
+  B --> C[CodeBuild: buildspec.yml]
+  C --> D[Artifact to S3 (managed by CodePipeline)]
+  D --> E[CodeDeploy: appspec.yml + scripts]
+  E --> F[EC2: codedeploy-agent executes scripts]
+  F --> G[Flask app running on :8000]
 
 
 ⸻
 
-Troubleshooting Quick Hits
-	•	Agent says “Missing credentials”: attach an IAM instance profile to EC2; restart the agent.
-	•	“AppSpec file not found”: your artifact is probably double‑zipped. Ensure appspec.yml is at the artifact root (see buildspec.yml above).
-	•	requirements.txt not found: this repo uses src/requirements.txt. Either keep it there or update your after_install.sh to check both src/ and app root.
-	•	Deploy hangs on ValidateService: increase retries in health_check.sh and check journalctl -u myapp for Gunicorn errors.
+✅ Step 9 — Test It
+	•	Push a change to your GitHub repo
+	•	CodePipeline will:
+	1.	Pull the latest commit
+	2.	Run CodeBuild to package the app
+	3.	Deploy to EC2 via CodeDeploy
+	•	Visit your EC2 Public DNS: http://<ec2-public-ip>:8000
 
 ⸻
 
-What to Learn Next
-	•	Blue/Green with CodeDeploy + ALB
-	•	ECS or Lambda deployments (different AppSpec format)
-	•	Replace manual EC2 agent install with Launch Template user‑data or a baked AMI
-	•	Use OIDC for GitHub Actions → (Hybrid CI in Actions, CD in CodeDeploy)
+🛠 Troubleshooting
 
+Problem	Likely Cause	Fix
+AppSpec file not found	appspec.yml not at artifact root	Fix buildspec.yml
+CodeDeploy stuck on ValidateService	Health check failing	Update health_check.sh
+CodeBuild fails to install deps	Wrong path to requirements.txt	Check script paths
+AccessDenied for GitHub connection	Connection not authorized	Reconnect GitHub in Developer Tools
+
+
+⸻
+
+🎯 Next Steps
+	•	Add Blue/Green deployments with an ALB
+	•	Use GitHub Actions for CI + CodeDeploy for CD
+	•	Add automated tests in CodeBuild
+
+⸻
+
+📚 References
+	•	AWS CodeDeploy User Guide
+	•	AWS CodePipeline User Guide
+	•	GitHub OIDC with AWS
+
+---
 
