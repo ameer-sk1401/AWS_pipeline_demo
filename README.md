@@ -10,7 +10,7 @@ A beginner‑friendly, production‑ready CI/CD pipeline for a simple **Flask He
 
 ## Architecture (Diagram)
 
-```mermaid
+	```mermaid
 flowchart LR
   A[Developer\nPush to GitHub] --> B[CodePipeline\nSource: GitHub Connection]
   B --> C[CodeBuild\nbuildspec.yml\n - install deps\n - package bundle]
