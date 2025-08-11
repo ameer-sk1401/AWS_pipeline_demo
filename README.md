@@ -62,20 +62,20 @@ Why? CodeDeploy needs this agent to receive and run your deployment instructions
 
 Your repo should look like this:
 
-		.
-├── src/
-│   ├── app.py                 # Flask app
-│   └── requirements.txt       # Flask + Gunicorn
-│
-├── scripts/
-│   ├── before_install.sh      # stop old app
-│   ├── after_install.sh       # install deps, venv
-│   ├── start.sh               # start app via systemd
-│   └── health_check.sh        # curl /health
-│
-├── appspec.yml                # CodeDeploy config
-├── buildspec.yml              # CodeBuild config
-└── README.md
+			.
+			├── src/
+			│   ├── app.py                 # Flask app
+			│   └── requirements.txt       # Flask + Gunicorn
+			│
+			├── scripts/
+			│   ├── before_install.sh      # stop old app
+			│   ├── after_install.sh       # install deps, venv
+			│   ├── start.sh               # start app via systemd
+			│   └── health_check.sh        # curl /health
+			│
+			├── appspec.yml                # CodeDeploy config
+			├── buildspec.yml              # CodeBuild config
+			└── README.md
 
 
 ⸻
@@ -84,29 +84,29 @@ Your repo should look like this:
 
 CodeDeploy uses appspec.yml to know where to copy files and what scripts to run.
 
-version: 0.0
-os: linux
-files:
-  - source: src/
-    destination: /opt/myapp/src
-permissions:
-  - object: /opt/myapp/src
-    pattern: '**'
-    owner: ec2-user
-    group: ec2-user
-hooks:
-  BeforeInstall:
-    - location: scripts/before_install.sh
-      runas: root
-  AfterInstall:
-    - location: scripts/after_install.sh
-      runas: root
-  ApplicationStart:
-    - location: scripts/start.sh
-      runas: root
-  ValidateService:
-    - location: scripts/health_check.sh
-      runas: root
+	version: 0.0
+	os: linux
+	files:
+	  - source: src/
+	    destination: /opt/myapp/src
+	permissions:
+	  - object: /opt/myapp/src
+	    pattern: '**'
+	    owner: ec2-user
+	    group: ec2-user
+	hooks:
+	  BeforeInstall:
+	    - location: scripts/before_install.sh
+	      runas: root
+	  AfterInstall:
+	    - location: scripts/after_install.sh
+	      runas: root
+	  ApplicationStart:
+	    - location: scripts/start.sh
+	      runas: root
+	  ValidateService:
+	    - location: scripts/health_check.sh
+	      runas: root
 
 
 ⸻
@@ -115,22 +115,22 @@ hooks:
 
 CodeBuild runs this to package your artifact.
 
-version: 0.2
-phases:
-  install:
-    commands:
-      - pip install -r src/requirements.txt
-  build:
-    commands:
-      - mkdir -p bundle
-      - cp -r src bundle/src
-      - cp appspec.yml bundle/
-      - cp -r scripts bundle/scripts
-artifacts:
-  base-directory: bundle
-  files:
-    - '**/*'
-  discard-paths: no
+	version: 0.2
+	phases:
+	  install:
+	    commands:
+	      - pip install -r src/requirements.txt
+	  build:
+	    commands:
+	      - mkdir -p bundle
+	      - cp -r src bundle/src
+	      - cp appspec.yml bundle/
+	      - cp -r scripts bundle/scripts
+	artifacts:
+	  base-directory: bundle
+	  files:
+	    - '**/*'
+	  discard-paths: no
 
 Tip: This ensures appspec.yml is at the root of the ZIP — required by CodeDeploy.
 
@@ -169,34 +169,78 @@ Tip: This ensures appspec.yml is at the root of the ZIP — required by CodeDepl
 
 📈 Step 8 — Workflow Diagram
 
-flowchart LR
-  A[Push code to GitHub] --> B[CodePipeline: Source]
-  B --> C[CodeBuild: buildspec.yml]
-  C --> D[Artifact to S3 (managed by CodePipeline)]
-  D --> E[CodeDeploy: appspec.yml + scripts]
-  E --> F[EC2: codedeploy-agent executes scripts]
-  F --> G[Flask app running on :8000]
+		flowchart LR
+		  A[Push code to GitHub] --> B[CodePipeline: Source]
+		  B --> C[CodeBuild: buildspec.yml]
+		  C --> D[Artifact to S3 (managed by CodePipeline)]
+		  D --> E[CodeDeploy: appspec.yml + scripts]
+		  E --> F[EC2: codedeploy-agent executes scripts]
+		  F --> G[Flask app running on :8000]
 
 
 ⸻
 
 ✅ Step 9 — Test It
-	•	Push a change to your GitHub repo
-	•	CodePipeline will:
-	1.	Pull the latest commit
-	2.	Run CodeBuild to package the app
-	3.	Deploy to EC2 via CodeDeploy
-	•	Visit your EC2 Public DNS: http://<ec2-public-ip>:8000
+		•	Push a change to your GitHub repo
+		•	CodePipeline will:
+		1.	Pull the latest commit
+		2.	Run CodeBuild to package the app
+		3.	Deploy to EC2 via CodeDeploy
+		•	Visit your EC2 Public DNS: http://<ec2-public-ip>:8000
 
 ⸻
 
 🛠 Troubleshooting
 
-Problem	Likely Cause	Fix
-AppSpec file not found	appspec.yml not at artifact root	Fix buildspec.yml
-CodeDeploy stuck on ValidateService	Health check failing	Update health_check.sh
-CodeBuild fails to install deps	Wrong path to requirements.txt	Check script paths
-AccessDenied for GitHub connection	Connection not authorized	Reconnect GitHub in Developer Tools
+	Problem	Likely Cause	Fix
+	AppSpec file not found	appspec.yml not at artifact root	Fix buildspec.yml
+	CodeDeploy stuck on ValidateService	Health check failing	Update health_check.sh
+	CodeBuild fails to install deps	Wrong path to requirements.txt	Check script paths
+	AccessDenied for GitHub connection	Connection not authorized	Reconnect GitHub in Developer Tools
+
+
+IAM Roles:
+
+	We need to give AWS services permission to talk to each other.
+	
+	1 EC2 Instance Role
+	
+	Why: So the EC2 server can talk to CodeDeploy.
+		•	Go to IAM → Roles → Create role
+		•	Trusted entity: AWS service
+		•	Use case: EC2
+		•	Permissions: AmazonEC2RoleforAWSCodeDeploy (AWS managed policy)
+		•	Name: EC2CodeDeployRole
+		•	Create.
+		•	Attach this role to your EC2 instance:
+		•	EC2 → select instance → Actions → Security → Modify IAM Role → choose EC2CodeDeployRole.
+	
+	⸻
+	
+	2 CodeDeploy Role
+	
+	Why: So CodeDeploy can deploy to EC2.
+		•	IAM → Create Role → AWS Service → CodeDeploy
+		•	Permissions: AWSCodeDeployRole
+		•	Name: CodeDeployServiceRole
+	
+	⸻
+	
+	3 CodeBuild Role
+	
+	Why: So CodeBuild can pull from GitHub and push to S3.
+		•	IAM → Create Role → AWS Service → CodeBuild
+		•	Permissions: AmazonS3FullAccess, CloudWatchLogsFullAccess
+		•	Name: CodeBuildServiceRole
+	
+	⸻
+	
+	4 CodePipeline Role
+	
+	Why: So CodePipeline can use CodeBuild and CodeDeploy.
+		•	IAM → Create Role → AWS Service → CodePipeline
+		•	Permissions: AWSCodePipeline_FullAccess
+		•	Name: CodePipelineServiceRole
 
 
 ⸻
