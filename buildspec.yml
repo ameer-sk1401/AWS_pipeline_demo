@@ -5,13 +5,13 @@ phases:
     - pip install -r requirements.txt
   build:
     commands:
-    - echo "Zipping deployment package"
+    - rm -rf bundle
     - mkdir -p bundle
     - cp -r src bundle/src
     - cp appspec.yml bundle/
     - cp -r scripts bundle/scripts
-    - cd bundle && zip -r ../artifact.zip . && cd -
 artifacts:
+  base-directory: bundle
   files:
-  - artifact.zip
-  discard-paths: yes
+  - '**/*'
+  discard-paths: no
